@@ -1,60 +1,34 @@
-// app/api/chat/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { generateText } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { documents } from "@/app/data/documents";
-
-// Simple keyword RAG helper
-function findRelevantDoc(prompt: string) {
-  let bestDoc = null;
-  let bestScore = -1;
-  const words = prompt.toLowerCase().split(/\W+/).filter(Boolean);
-
-  for (const doc of documents) {
-    const score = words.filter((word) =>
-      doc.text.toLowerCase().includes(word)
-    ).length;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestDoc = doc;
-    }
-  }
-  return bestDoc;
-}
+// app/api/chat/route.tsimport { NextRequest } from "next/server";
+import { mistral } from "@ai-sdk/mistral";
+import { streamText } from "ai";
+import { NextRequest } from "next/server";
 
 export async function POST(req: NextRequest) {
   try {
     const { question } = await req.json();
+
     if (!question || typeof question !== "string") {
-      return NextResponse.json(
-        { answer: "Please provide a valid question." },
-        { status: 400 }
-      );
+      return new Response("Invalid question", { status: 400 });
     }
 
-    const doc = findRelevantDoc(question);
-    const context = doc?.text ?? "No matching context found.";
-
-    // If no API key, fall back to a simple context-based reply
-    if (!process.env.OPENAI_API_KEY) {
-      const fallback =
-        doc?.text ??
-        "Sorry, I do not have enough information to answer that right now.";
-      return NextResponse.json({ answer: fallback });
+    // Ensure API key is present
+    if (!process.env.MISTRAL_API_KEY) {
+      return new Response("Mistral API key missing in environment.", {
+        status: 500,
+      });
     }
 
-    const { text } = await generateText({
-      model: openai("gpt-4o-mini"),
-      prompt: `You are a concise assistant. Answer using ONLY this context. If the context is not relevant, say you do not have that information.\n\nContext:\n${context}\n\nQuestion: ${question}\nAnswer:`,
+    // STREAM the AI response
+    const result = await streamText({
+      model: mistral("mistral-large-latest"),
+      prompt: question,
     });
 
-    return NextResponse.json({ answer: text ?? "No answer available." });
+    // RETURN STREAMING RESPONSE
+    return result.toTextStreamResponse();
+
   } catch (err) {
-    console.error("API RAG Error:", err);
-    return NextResponse.json(
-      { answer: "Sorry, I couldn't fetch an answer." },
-      { status: 500 }
-    );
+    console.error("Mistral Error:", err);
+    return new Response("Server Error", { status: 500 });
   }
 }
