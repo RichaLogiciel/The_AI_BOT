@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { SendIcon } from "../assets/svg/sendIcon";
 import { WhiteTheme } from "../assets/svg/whiteTheme";
 import { DarkTheme } from "../assets/svg/darkTheme";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
   id: string;
@@ -13,7 +15,7 @@ interface Message {
 
 export default function ChatBot() {
   const [messages, setMessages] = useState<Message[]>([
-    { id: "1", text: "Hi! Ask me anything.", sender: "bot" },
+    { id: "1", text: "Hi! I'm here to help you.", sender: "bot" },
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isDark, setIsDark] = useState(false); // Default to light theme
@@ -38,13 +40,7 @@ export default function ChatBot() {
     };
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
-
-    // Enforce a visible typing indicator for at least 3 seconds
     setIsTyping(true);
-    const typingStart = Date.now();
-    const minTypingMs = 3000;
-
-    let answer = "Sorry, I couldn't fetch an answer.";
 
     try {
       const res = await fetch("/api/chat", {
@@ -52,27 +48,40 @@ export default function ChatBot() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: userMessage.text }),
       });
-      const data = await res.json();
-      if (data?.answer) {
-        answer = data.answer;
+
+      if (!res.body) {
+        throw new Error("Response body is null");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      let botMessage = "";
+      const botMsgId = (Date.now() + 1).toString();
+
+      // Add empty bot message first (live updating)
+      setMessages((prev) => [
+        ...prev,
+        { id: botMsgId, text: "", sender: "bot" },
+      ]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        botMessage += chunk;
+
+        // Update last bot message LIVE
+        setMessages((prev) =>
+          prev.map((m) => (m.id === botMsgId ? { ...m, text: botMessage } : m))
+        );
       }
     } catch (err) {
       console.error(err);
-    } finally {
-      const elapsed = Date.now() - typingStart;
-      if (elapsed < minTypingMs) {
-        await new Promise((resolve) => setTimeout(resolve, minTypingMs - elapsed));
-      }
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          text: answer,
-          sender: "bot",
-        },
-      ]);
-      setIsTyping(false);
     }
+
+    setIsTyping(false);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -113,7 +122,7 @@ export default function ChatBot() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-white from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800">
       <div
-        className={`flex flex-col w-full max-w-xl h-[700px] ${themeClasses.container} rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700`}
+        className={`flex flex-col w-full max-w-4xl h-[780px] ${themeClasses.container} rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700`}
       >
         {/* Header with Theme Toggle */}
         <div
@@ -158,9 +167,32 @@ export default function ChatBot() {
                       : "1rem 1rem 1rem 0.25rem",
                 }}
               >
-                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                {/* <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                   {message.text}
-                </p>
+                </p> */}
+                {message.sender === "bot" ? (
+                  <div className="overflow-x-auto">
+                    <div
+                      className="prose prose-sm max-w-none dark:prose-invert
+                 prose-table:w-full
+                 prose-table:border
+                 prose-table:border-gray-300 dark:prose-table:border-gray-600
+                 prose-th:border prose-td:border
+                 prose-th:px-3 prose-th:py-2
+                 prose-td:px-3 prose-td:py-2
+                 prose-th:text-left
+                 prose-table:border-collapse"
+                    >
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {message.text}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {message.text}
+                  </p>
+                )}
               </div>
             </div>
           ))}

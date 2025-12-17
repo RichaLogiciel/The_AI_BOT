@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/mistral": "^2.0.25",
     "@ai-sdk/openai": "^2.0.80",
     "ai": "^5.0.108",
     "langchain": "^1.1.5",
@@ -16,7 +17,9 @@
     "openai": "^6.10.0",
     "postcss": "^8.5.6",
     "react": "19.2.1",
-    "react-dom": "19.2.1"
+    "react-dom": "19.2.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.17",
